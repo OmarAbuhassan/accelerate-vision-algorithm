@@ -3,125 +3,141 @@
 #include "opencv2/highgui/highgui.hpp"
 #include <iostream>
 #include <cmath>
+#include <string>
+
+// NVTX for profiling
+#include "nvToolsExt.h"
 
 using namespace std;
 using namespace cv;
 
 int main() {
-	Mat robot = imread("robot.jpg", CV_LOAD_IMAGE_GRAYSCALE);
-	Mat house = imread("house.jpg", CV_LOAD_IMAGE_GRAYSCALE);
+    // Load images (once)
+    Mat robot = imread("robot.jpg", IMREAD_GRAYSCALE);
+    Mat house = imread("house.jpg", IMREAD_GRAYSCALE);
 
+    if (robot.empty() || house.empty()) {
+        cerr << "Error: could not load robot.jpg or house.jpg" << endl;
+        return -1;
+    }
 
-	int rows = 0;
-	if (robot.rows > house.rows) {
-		rows = house.rows;
-	}
-	else {
-		rows = robot.rows;
-	}
+    // Determine common size
+    int rows = (robot.rows > house.rows) ? house.rows : robot.rows;
+    int cols = (robot.cols > house.cols) ? house.cols : robot.cols;
 
-	int cols = 0;
-	if (robot.cols > house.cols) {
-		cols = house.cols;
-	}
-	else {
-		cols = robot.cols;
-	}
+    // Allocate output images once, reused every iteration
+    Mat result(rows, cols, CV_8UC1, Scalar(0));
+    Mat cte(rows, cols, CV_8UC1, Scalar(0));
+    Mat grad(rows, cols, CV_8UC1, Scalar(0));
+    Mat result2(rows, cols, CV_8UC1, Scalar(0));
+    Mat result3(rows, cols, CV_8UC1, Scalar(0));
+    Mat result4(rows, cols, CV_8UC1, Scalar(0));
 
-	Mat result(rows, cols, CV_8UC1, Scalar(0));
-	Mat cte(rows, cols, CV_8UC1, Scalar(0));
-	Mat grad(rows, cols, CV_8UC1, Scalar(0));
-	Mat result2(rows, cols, CV_8UC1, Scalar(0));
-	Mat result3(rows, cols, CV_8UC1, Scalar(0));
-	Mat result4(rows, cols, CV_8UC1, Scalar(0));
+    int k = 30;
+    float dx = 255.0f / static_cast<float>(cols);
 
-	
+    // Run 15 sequential iterations
+    for (int iter = 0; iter < 15; ++iter) {
+        // Iteration-level NVTX range
+        string iter_name = "iteration_" + to_string(iter);
+        nvtxRangePushA(iter_name.c_str());
 
-	int k = 30;
-	// combinar imagenes
-	for (int i = 0; i < rows; i++) {
-		for (int j = 0; j < cols; j++) {
-			result.at<uchar>(i, j) = (uchar)((robot.at<uchar>(i, j) + house.at<uchar>(i, j)) / 2);
-		}
-	}
-	//sumar constante
-	for (int i = 0; i < rows; i++) {
-		for (int j = 0; j < cols; j++) {
-			
-			if (robot.at<uchar>(i, j) + k > 255) {
-				cte.at<uchar>(i, j) = uchar(255);
-			}
-			else {
-				cte.at<uchar>(i, j) = (robot.at<uchar>(i, j) + k);
-			}
-		}
-	}
-	// degradado
-	float dx = 255.0f / grad.cols;
-	float r = 0;
-	for (int i = 0; i < rows; i++) {
-		for (int j = 0; j < cols; j++) {
-			r = j * dx;
-			grad.at<uchar>(i, j) = r;
+        // ---------------- combine images (average) ----------------
+        nvtxRangePushA("combine_images_avg");
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                result.at<uchar>(i, j) =
+                    static_cast<uchar>((robot.at<uchar>(i, j) + house.at<uchar>(i, j)) / 2);
+            }
+        }
+        nvtxRangePop(); // combine_images_avg
 
-		}
-	}
-	//suma del degradado (promedio)
-	for (int i = 0; i < rows; i++) {
-		for (int j = 0; j < cols; j++) {
-			result2.at<uchar>(i, j) = (robot.at<uchar>(i, j) + grad.at<uchar>(i, j))/2;
-		}
-	}
-	//suma directa
-	for (int i = 0; i < rows; i++) {
-		for (int j = 0; j < cols; j++) {
-			result3.at<uchar>(i, j) = (robot.at<uchar>(i, j) + grad.at<uchar>(i, j));
-			if (robot.at<uchar>(i, j) + grad.at<uchar>(i,j) > 255) {
-				result3.at<uchar>(i, j) = uchar(255);
-			}
-			else {
-				result3.at<uchar>(i, j) = robot.at<uchar>(i, j) + grad.at<uchar>(i, j);
-			}
-		}
-	}
-	//suma promedio degradado
-	float a = 0;
-	float b = 1;
-	float inc = 1.0 / result4.rows;
-	for (int i = 0; i < rows; i++) {
-		if (a + inc > 1) {
-			a = 1;
-		}
-		else {
-			a += inc;
-		}
+        // ---------------- add constant to robot -------------------
+        nvtxRangePushA("add_constant_robot");
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                int val = robot.at<uchar>(i, j) + k;
+                if (val > 255) val = 255;
+                cte.at<uchar>(i, j) = static_cast<uchar>(val);
+            }
+        }
+        nvtxRangePop(); // add_constant_robot
 
-		if (b - inc < 0) {
-			b = 0;
-		}
-		else {
-			b -= inc;
-		}
-		for (int j = 0; j < cols; j++) {
-			
-			result4.at<uchar>(i, j) = a*robot.at<uchar>(i, j) + b*house.at<uchar>(i, j);
-		}
-	}
+        // ---------------- build horizontal gradient --------------
+        nvtxRangePushA("build_gradient");
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                float r = j * dx;
+                if (r > 255.0f) r = 255.0f;
+                grad.at<uchar>(i, j) = static_cast<uchar>(r);
+            }
+        }
+        nvtxRangePop(); // build_gradient
 
-	namedWindow("addition", WINDOW_AUTOSIZE);
-	imshow("addition", result);
-	namedWindow("constant", WINDOW_AUTOSIZE);
-	imshow("constant", cte);
-	namedWindow("degrad", WINDOW_AUTOSIZE);
-	imshow("degrad", grad);
-	namedWindow("suma promedio", WINDOW_AUTOSIZE);
-	imshow("suma promedio", result2);
-	namedWindow("robot", WINDOW_AUTOSIZE);
-	imshow("robot", robot);
-	namedWindow("suma directa", WINDOW_AUTOSIZE);
-	imshow("suma directa", result3);
-	namedWindow("suma promedio degradado", WINDOW_AUTOSIZE);
-	imshow("suma promedio degradado", result4);
-	waitKey(0);
+        // ---------------- add gradient (average) ------------------
+        nvtxRangePushA("add_gradient_avg");
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                result2.at<uchar>(i, j) =
+                    static_cast<uchar>((robot.at<uchar>(i, j) + grad.at<uchar>(i, j)) / 2);
+            }
+        }
+        nvtxRangePop(); // add_gradient_avg
 
+        // ---------------- add gradient (saturated sum) -----------
+        nvtxRangePushA("add_gradient_saturated");
+        for (int i = 0; i < rows; i++) {
+            for (int j = 0; j < cols; j++) {
+                int val = robot.at<uchar>(i, j) + grad.at<uchar>(i, j);
+                if (val > 255) val = 255;
+                result3.at<uchar>(i, j) = static_cast<uchar>(val);
+            }
+        }
+        nvtxRangePop(); // add_gradient_saturated
+
+        // ---------------- blended gradient between robot/house ---
+        nvtxRangePushA("blend_gradient_robot_house");
+        float a = 0.0f;
+        float b = 1.0f;
+        float inc = 1.0f / static_cast<float>(rows);
+
+        for (int i = 0; i < rows; i++) {
+            // update blending weights per row
+            a += inc;
+            if (a > 1.0f) a = 1.0f;
+            b -= inc;
+            if (b < 0.0f) b = 0.0f;
+
+            for (int j = 0; j < cols; j++) {
+                float val = a * robot.at<uchar>(i, j) + b * house.at<uchar>(i, j);
+                if (val > 255.0f) val = 255.0f;
+                if (val < 0.0f) val = 0.0f;
+                result4.at<uchar>(i, j) = static_cast<uchar>(val);
+            }
+        }
+        nvtxRangePop(); // blend_gradient_robot_house
+
+        nvtxRangePop(); // iteration_X
+    }
+
+    // Optional: show one iteration result (if you want to visualize instead of just profiling)
+    
+    // namedWindow("addition", WINDOW_AUTOSIZE);
+    // imshow("addition", result);
+    // namedWindow("constant", WINDOW_AUTOSIZE);
+    // imshow("constant", cte);
+    // namedWindow("degrad", WINDOW_AUTOSIZE);
+    // imshow("degrad", grad);
+    // namedWindow("suma promedio", WINDOW_AUTOSIZE);
+    // imshow("suma promedio", result2);
+    // namedWindow("robot", WINDOW_AUTOSIZE);
+    // imshow("robot", robot);
+    // namedWindow("suma directa", WINDOW_AUTOSIZE);
+    // imshow("suma directa", result3);
+    // namedWindow("suma promedio degradado", WINDOW_AUTOSIZE);
+    // imshow("suma promedio degradado", result4);
+    // waitKey(0);
+    
+
+    return 0;
 }
