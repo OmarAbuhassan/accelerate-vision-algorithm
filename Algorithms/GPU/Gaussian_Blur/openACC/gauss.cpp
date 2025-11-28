@@ -37,8 +37,8 @@ void bubble_sort_9(unsigned char* arr, int n) {
 
 int main() {
     // 1. Load Data on Host
-    Mat image = imread("mounten.jpg", IMREAD_GRAYSCALE);
-    Mat pepperNoise = imread("sun.jpg", IMREAD_GRAYSCALE);
+    Mat image = imread("../data/mounten.jpg", IMREAD_GRAYSCALE);
+    Mat pepperNoise = imread("../data/sun.jpg", IMREAD_GRAYSCALE);
 
     if (image.empty() || pepperNoise.empty()) {
         cerr << "Failed to load images." << endl;
