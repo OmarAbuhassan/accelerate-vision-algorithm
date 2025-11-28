@@ -45,6 +45,14 @@ int main() {
         return -1;
     }
 
+    // ---------------------------------------------------------
+    // CRITICAL FIX: Ensure both images are exactly the same size
+    // ---------------------------------------------------------
+    if (image.size() != pepperNoise.size()) {
+        cout << "Resizing pepperNoise to match image dimensions..." << endl;
+        cv::resize(pepperNoise, pepperNoise, image.size());
+    }
+
     // Ensure images are continuous in memory for raw pointer access
     if (!image.isContinuous()) image = image.clone();
     if (!pepperNoise.isContinuous()) pepperNoise = pepperNoise.clone();
@@ -72,8 +80,6 @@ int main() {
     unsigned char* ptr_gauss3 = gaussiano3.ptr<uchar>();
 
     // Constants
-    const int innerMatrixIndex = 3;
-    const int tamCampana = 5;
     const int thresholdLimit = 40;
     
     // Gaussian Kernels (Flattened for easier GPU mapping)
@@ -136,7 +142,6 @@ int main() {
         for (int i = 0; i < rows; ++i) {
             for (int j = 0; j < cols; ++j) {
                 float sum = 0.0f;
-                int count = 0; // Better boundary handling
                 for (int a = -1; a <= 1; ++a) {
                     for (int b = -1; b <= 1; ++b) {
                         int yy = i + a;
@@ -273,7 +278,6 @@ int main() {
 
     // =========================================================================
     // Clean up GPU Memory
-    // Optional: copyout here if you wanted to save the images to disk
     // =========================================================================
     #pragma acc exit data delete(ptr_src, ptr_pepper, ptr_blur, ptr_diff, \
                                  ptr_med, ptr_gauss1, ptr_gauss2, ptr_gauss3, \
