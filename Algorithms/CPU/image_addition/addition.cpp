@@ -5,7 +5,7 @@
 #include <cmath>
 #include <string>
 
-// NVTX for profiling
+// NVTX for profiling (Keep this included)
 #include "nvToolsExt.h"
 
 using namespace std;
@@ -35,9 +35,10 @@ int main() {
 
     int k = 30;
     float dx = 255.0f / static_cast<float>(cols);
+    int total_iterations = 15;
 
     // Run 15 sequential iterations
-    for (int iter = 0; iter < 15; ++iter) {
+    for (int iter = 0; iter < total_iterations; ++iter) {
         // Iteration-level NVTX range
         string iter_name = "iteration_" + to_string(iter);
         nvtxRangePushA(iter_name.c_str());
@@ -116,28 +117,16 @@ int main() {
             }
         }
         nvtxRangePop(); // blend_gradient_robot_house
-
+        
         nvtxRangePop(); // iteration_X
-    }
+        // === NEW: SAVE ONLY ON LAST ITERATION ===
+        if (iter == total_iterations - 1) {
+            cout << "Last iteration reached (" << iter << "). Saving images..." << endl;
+            imwrite("out_average.jpg", result);
+            imwrite("out_blend.jpg", result4);
+        }
 
-    // Optional: show one iteration result (if you want to visualize instead of just profiling)
-    
-    // namedWindow("addition", WINDOW_AUTOSIZE);
-    // imshow("addition", result);
-    // namedWindow("constant", WINDOW_AUTOSIZE);
-    // imshow("constant", cte);
-    // namedWindow("degrad", WINDOW_AUTOSIZE);
-    // imshow("degrad", grad);
-    // namedWindow("suma promedio", WINDOW_AUTOSIZE);
-    // imshow("suma promedio", result2);
-    // namedWindow("robot", WINDOW_AUTOSIZE);
-    // imshow("robot", robot);
-    // namedWindow("suma directa", WINDOW_AUTOSIZE);
-    // imshow("suma directa", result3);
-    // namedWindow("suma promedio degradado", WINDOW_AUTOSIZE);
-    // imshow("suma promedio degradado", result4);
-    // waitKey(0);
-    
+    }
 
     return 0;
 }
