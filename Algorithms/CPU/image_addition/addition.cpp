@@ -117,15 +117,19 @@ int main() {
             }
         }
         nvtxRangePop(); // blend_gradient_robot_house
-        
-        nvtxRangePop(); // iteration_X
+
         // === NEW: SAVE ONLY ON LAST ITERATION ===
         if (iter == total_iterations - 1) {
             cout << "Last iteration reached (" << iter << "). Saving images..." << endl;
             imwrite("out_average.jpg", result);
+            imwrite("out_constant.jpg", cte);
+            imwrite("out_gradient.jpg", grad);
+            imwrite("out_grad_avg.jpg", result2);
+            imwrite("out_grad_sat.jpg", result3);
             imwrite("out_blend.jpg", result4);
         }
 
+        nvtxRangePop(); // iteration_X
     }
 
     return 0;
