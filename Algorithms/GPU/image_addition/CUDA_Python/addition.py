@@ -96,22 +96,24 @@ def kernel_add_grad_saturated(img, grad, out):
 def kernel_blend_gradient(img1, img2, out):
     """
     Equivalent to blending robot and house based on row index.
+    Matches C++ logic:
+    a starts at 0, adds inc per row (inside loop).
+    b starts at 1, subtracts inc per row (inside loop).
     """
     x, y = cuda.grid(2)
     rows, cols = out.shape
 
     if x < rows and y < cols:
-        # Calculate weights based on row index (x)
-        # inc = 1.0 / rows
-        # a = x * inc
-        
         inc = 1.0 / float32(rows)
-        a = float32(x) * inc
         
-        # Clamp a
+        # C++: a += inc (starts at 0.0)
+        # For row x, this is (x + 1) * inc
+        a = (float32(x) + 1.0) * inc
         if a > 1.0: a = 1.0
         
-        b = 1.0 - a
+        # C++: b -= inc (starts at 1.0)
+        # For row x, this is 1.0 - (x + 1) * inc
+        b = 1.0 - ((float32(x) + 1.0) * inc)
         if b < 0.0: b = 0.0
 
         p1 = float32(img1[x, y])
@@ -231,15 +233,24 @@ def main():
     print("Processing complete.")
 
     # 5. Retrieve Results (Copy back to Host)
-    # We only bring back the final results to save time
-    result_host = d_result.copy_to_host()
-    result4_host = d_result4.copy_to_host()
+    # Copy all device arrays back to host memory
+    result = d_result.copy_to_host()
+    cte = d_cte.copy_to_host()
+    grad = d_grad.copy_to_host()
+    result2 = d_result2.copy_to_host()
+    result3 = d_result3.copy_to_host()
+    result4 = d_result4.copy_to_host()
 
     # 6. Save/Visualize Results
-    # Saving just two examples to prove it works
-    cv2.imwrite("output_avg_cuda.jpg", result_host)
-    cv2.imwrite("output_blend_cuda.jpg", result4_host)
-    print("Saved output_avg_cuda.jpg and output_blend_cuda.jpg")
+    # Saving all outputs as requested
+    cv2.imwrite("out_average.jpg", result)
+    cv2.imwrite("out_constant.jpg", cte)
+    cv2.imwrite("out_gradient.jpg", grad)
+    cv2.imwrite("out_grad_avg.jpg", result2)
+    cv2.imwrite("out_grad_sat.jpg", result3)
+    cv2.imwrite("out_blend.jpg", result4)
+    
+    print("Saved: out_average.jpg, out_constant.jpg, out_gradient.jpg, out_grad_avg.jpg, out_grad_sat.jpg, out_blend.jpg")
 
 if __name__ == "__main__":
     if cuda.is_available():
