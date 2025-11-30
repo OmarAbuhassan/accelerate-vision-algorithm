@@ -1,19 +1,3 @@
-# CXX      := nvc++
-# CXXFLAGS := -std=c++11 -O2 `pkg-config --cflags opencv4` -I/usr/local/cuda/include
-# LDFLAGS  := `pkg-config --libs opencv4` -L/usr/local/cuda/lib64 -lnvToolsExt
-
-# TARGET   := hist_eq
-# SRC      := equalization.cpp
-
-# all: $(TARGET)
-
-# $(TARGET): $(SRC)
-# 	$(CXX) $(CXXFLAGS) -o $(TARGET) $(SRC) $(LDFLAGS)
-
-# clean:
-# 	rm -f $(TARGET)
-
-
 # --------------------------------------------------------
 # Compiler & Flags
 # --------------------------------------------------------
@@ -43,7 +27,7 @@ LDFLAGS = -L/opt/nvidia/hpc_sdk/Linux_x86_64/24.1/cuda/lib64 \
 # Targets
 # --------------------------------------------------------
 
-TARGET = hist_eq
+TARGET = hist_eq_gpu
 SRC    = equalization.cpp
 
 # Default target

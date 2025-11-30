@@ -18,7 +18,9 @@ int main() {
         return -1;
     }
 
-    // Run full pipeline 100 iterations (sequential)
+    Mat myMat1; // Declare outside loop to keep final result
+
+    // Run full pipeline 15 iterations (sequential)
     for (int iter = 0; iter < 15; iter++) {
 
         // ---- Iteration-level range ----
@@ -68,7 +70,7 @@ int main() {
 
         // ------------------------ apply_equalization -----------------------
         nvtxRangePushA("apply_equalization");
-        Mat myMat1(image.rows, image.cols, CV_8U, Scalar(0));
+        myMat1 = Mat(image.rows, image.cols, CV_8U, Scalar(0));
         for (int i = 0; i < image.rows; i++) {
             for (int j = 0; j < image.cols; j++) {
                 myMat1.at<uchar>(i, j) =
@@ -101,6 +103,10 @@ int main() {
 
         nvtxRangePop(); // iteration_X
     }
+
+    // Write output only once after all iterations
+    imwrite("./output/equalized_cpu.jpg", myMat1);
+    cout << "Output saved to ./output/equalized_cpu.jpg" << endl;
 
     return 0;
 }
