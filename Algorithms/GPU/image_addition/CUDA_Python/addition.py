@@ -3,23 +3,7 @@ import numpy as np
 from numba import cuda, uint8, float32, void
 import math
 import os
-
-# ------------------------------------------------------------------------------
-# NVTX HANDLING (Graceful Fallback)
-# ------------------------------------------------------------------------------
-try:
-    from numba.cuda import nvtx
-except ImportError:
-    print("Warning: Numba NVTX not found. Profiling ranges will be skipped.")
-    # Define a dummy class to prevent crashes if nvtx is missing
-    class nvtx:
-        @staticmethod
-        def range_push(name):
-            pass
-            
-        @staticmethod
-        def range_pop():
-            pass
+import nvtx  # <- use nvtx directly
 
 # ------------------------------------------------------------------------------
 # CUDA KERNELS
@@ -109,20 +93,24 @@ def kernel_blend_gradient(img1, img2, out):
         # C++: a += inc (starts at 0.0)
         # For row x, this is (x + 1) * inc
         a = (float32(x) + 1.0) * inc
-        if a > 1.0: a = 1.0
+        if a > 1.0:
+            a = 1.0
         
         # C++: b -= inc (starts at 1.0)
         # For row x, this is 1.0 - (x + 1) * inc
         b = 1.0 - ((float32(x) + 1.0) * inc)
-        if b < 0.0: b = 0.0
+        if b < 0.0:
+            b = 0.0
 
         p1 = float32(img1[x, y])
         p2 = float32(img2[x, y])
         
         val = (a * p1) + (b * p2)
         
-        if val > 255.0: val = 255.0
-        if val < 0.0: val = 0.0
+        if val > 255.0:
+            val = 255.0
+        if val < 0.0:
+            val = 0.0
         
         out[x, y] = np.uint8(val)
 
@@ -168,7 +156,6 @@ def main():
     print(f"Grid Config: {blocks_per_grid} blocks, {threads_per_block} threads/block")
 
     # 3. GPU Memory Allocation & Transfer (Done ONCE)
-    # We maintain data on the device to avoid PCI-e bottleneck inside the loop
     d_robot = cuda.to_device(robot_host)
     d_house = cuda.to_device(house_host)
 
@@ -186,54 +173,41 @@ def main():
 
     # 4. Processing Loop (15 Iterations)
     for i in range(15):
-        range_name = f"iteration_{i}"
-        
-        # NVTX Range Push (Iteration)
-        nvtx.range_push(range_name)
-        
-        # --- Kernel 1: Average ---
-        nvtx.range_push("combine_images_avg")
-        kernel_combine_avg[blocks_per_grid, threads_per_block](d_robot, d_house, d_result)
-        cuda.synchronize() # Optional: Ensures accurate NVTX timing for this block
-        nvtx.range_pop()
+        with nvtx.annotate(f"iteration_{i}"):
 
-        # --- Kernel 2: Add Constant ---
-        nvtx.range_push("add_constant_robot")
-        kernel_add_constant[blocks_per_grid, threads_per_block](d_robot, d_cte, k)
-        cuda.synchronize()
-        nvtx.range_pop()
+            # --- Kernel 1: Average ---
+            with nvtx.annotate("combine_images_avg"):
+                kernel_combine_avg[blocks_per_grid, threads_per_block](d_robot, d_house, d_result)
+                cuda.synchronize()
 
-        # --- Kernel 3: Build Gradient ---
-        nvtx.range_push("build_gradient")
-        kernel_build_gradient[blocks_per_grid, threads_per_block](d_grad, dx)
-        cuda.synchronize()
-        nvtx.range_pop()
+            # --- Kernel 2: Add Constant ---
+            with nvtx.annotate("add_constant_robot"):
+                kernel_add_constant[blocks_per_grid, threads_per_block](d_robot, d_cte, k)
+                cuda.synchronize()
 
-        # --- Kernel 4: Add Gradient (Avg) ---
-        nvtx.range_push("add_gradient_avg")
-        kernel_add_grad_avg[blocks_per_grid, threads_per_block](d_robot, d_grad, d_result2)
-        cuda.synchronize()
-        nvtx.range_pop()
+            # --- Kernel 3: Build Gradient ---
+            with nvtx.annotate("build_gradient"):
+                kernel_build_gradient[blocks_per_grid, threads_per_block](d_grad, dx)
+                cuda.synchronize()
 
-        # --- Kernel 5: Add Gradient (Sat) ---
-        nvtx.range_push("add_gradient_saturated")
-        kernel_add_grad_saturated[blocks_per_grid, threads_per_block](d_robot, d_grad, d_result3)
-        cuda.synchronize()
-        nvtx.range_pop()
+            # --- Kernel 4: Add Gradient (Avg) ---
+            with nvtx.annotate("add_gradient_avg"):
+                kernel_add_grad_avg[blocks_per_grid, threads_per_block](d_robot, d_grad, d_result2)
+                cuda.synchronize()
 
-        # --- Kernel 6: Blend ---
-        nvtx.range_push("blend_gradient_robot_house")
-        kernel_blend_gradient[blocks_per_grid, threads_per_block](d_robot, d_house, d_result4)
-        cuda.synchronize()
-        nvtx.range_pop()
+            # --- Kernel 5: Add Gradient (Sat) ---
+            with nvtx.annotate("add_gradient_saturated"):
+                kernel_add_grad_saturated[blocks_per_grid, threads_per_block](d_robot, d_grad, d_result3)
+                cuda.synchronize()
 
-        # NVTX Range Pop (Iteration)
-        nvtx.range_pop()
+            # --- Kernel 6: Blend ---
+            with nvtx.annotate("blend_gradient_robot_house"):
+                kernel_blend_gradient[blocks_per_grid, threads_per_block](d_robot, d_house, d_result4)
+                cuda.synchronize()
 
     print("Processing complete.")
 
     # 5. Retrieve Results (Copy back to Host)
-    # Copy all device arrays back to host memory
     result = d_result.copy_to_host()
     cte = d_cte.copy_to_host()
     grad = d_grad.copy_to_host()
@@ -242,7 +216,6 @@ def main():
     result4 = d_result4.copy_to_host()
 
     # 6. Save/Visualize Results
-    # Saving all outputs as requested
     cv2.imwrite("out_average.jpg", result)
     cv2.imwrite("out_constant.jpg", cte)
     cv2.imwrite("out_gradient.jpg", grad)
