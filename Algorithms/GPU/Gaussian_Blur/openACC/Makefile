@@ -43,7 +43,7 @@ run: $(TARGET)
 
 # Profile Rule
 profile: $(TARGET)
-	nsys profile --trace=nvtx,openacc --output=blur_report --force-overwrite true ./$(TARGET)
+	nsys profile --trace=nvtx,openacc,cuda --stats=true --output=blur_report --force-overwrite true ./$(TARGET)
 
 # Clean Rule
 clean:
