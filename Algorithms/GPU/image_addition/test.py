@@ -204,15 +204,14 @@ def main():
         "cuda_out_6_blend.jpg"
     ]
     
-    # Mapping from CUDA C++ output names to standard names
-    cuda_cpp_mapping = {
-        "cuda_out_1_avg.jpg": "out_average.jpg",
-        "cuda_out_2_const.jpg": "out_constant.jpg",
-        "cuda_out_3_grad.jpg": "out_gradient.jpg",
-        "cuda_out_4_grad_avg.jpg": "out_grad_avg.jpg",
-        "cuda_out_5_grad_sat.jpg": "out_grad_sat.jpg",
-        "cuda_out_6_blend.jpg": "out_blend.jpg"
-    }
+    cuda_cpp_outputs = [
+        "cuda_out_1_avg.jpg",
+        "cuda_out_2_const.jpg",
+        "cuda_out_3_grad.jpg",
+        "cuda_out_4_grad_avg.jpg",
+        "cuda_out_5_grad_sat.jpg",
+        "cuda_out_6_blend.jpg"
+    ]
     
     # Check if ground truth exists
     print_section("Checking Ground Truth (CPU Implementation)")
@@ -241,7 +240,7 @@ def main():
     implementations = [
         ("OpenACC", gpu_base_dir / "openACC", expected_outputs, None),
         ("CUDA Python", gpu_base_dir / "CUDA_Python", expected_outputs, None),
-        ("CUDA C++", gpu_base_dir / "CUDA_CPP", cuda_cpp_outputs, cuda_cpp_mapping),
+        ("CUDA C++", gpu_base_dir / "CUDA_CPP", cuda_cpp_outputs, None),
     ]
     
     all_results = []
